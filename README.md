@@ -6,7 +6,7 @@ INDENG 231 — Data Modeling, UC Berkeley, Spring 2026
 
 ## Overview
 
-This project implements a Karpathy-style personal knowledge base using the Google Gemini API (free tier). The system demonstrates what an LLM compiler adds over a simple document store: it reads all raw source material simultaneously, resolves contradictions between sources, and surfaces cross-source implications that no single note contains on its own.
+This project implements a Karpathy-style personal knowledge base using the Google Gemini API. The system demonstrates what an LLM compiler adds over a simple document store: it reads all raw source material simultaneously, resolves contradictions between sources, and surfaces cross-source implications that no single note contains on its own.
 
 The topic is the design of an AI-powered social platform for shared human experiences — a platform that connects users who have navigated similar life challenges (illness, grief, career disruption, immigration) on a mentor-mentee model, mediated by a voice-enabled AI conversational interface.
 
