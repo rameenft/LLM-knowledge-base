@@ -49,7 +49,13 @@ def generate_text(client, prompt: str, on_chunk=None) -> str:
     for chunk in client.models.generate_content_stream(
         model=config.QA_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=700, temperature=0.2),
+        config=types.GenerateContentConfig(
+            max_output_tokens=1500,
+            temperature=0.2,
+            # Gemini 2.5 Flash "thinking" tokens count against max_output_tokens and can
+            # truncate the visible answer; this task needs retrieval-grounded prose, not reasoning.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        ),
     ):
         if chunk.text:
             text += chunk.text

@@ -119,7 +119,11 @@ def compile_article(client, topic: str, description: str, sources_text: str,
     for chunk in client.models.generate_content_stream(
         model=COMPILE_MODEL,
         contents=build_prompt(topic, description, sources_text),
-        config=types.GenerateContentConfig(max_output_tokens=2500, temperature=0.4),
+        config=types.GenerateContentConfig(
+            max_output_tokens=4000,
+            temperature=0.4,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),  # see kb/answer.py
+        ),
     ):
         if chunk.text:
             full += chunk.text
