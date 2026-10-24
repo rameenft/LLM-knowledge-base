@@ -1,2 +1,5 @@
 -r requirements.txt
+# MCP server + tests
+mcp<2
+httpx
 pytest

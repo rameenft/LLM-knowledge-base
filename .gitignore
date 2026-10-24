@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 .azurite/
 *.npy
+.tools/
+.local_storage/
+local.settings.json

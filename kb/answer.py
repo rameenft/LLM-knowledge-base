@@ -58,6 +58,24 @@ def generate_text(client, prompt: str, on_chunk=None) -> str:
     return text
 
 
+def answer_from_hits(
+    question: str,
+    articles: dict[str, str],
+    hits: list[tuple[str, float]],
+    client=None,
+    on_chunk=None,
+) -> Answer:
+    """Generate a cited answer from already-retrieved (topic, score) hits."""
+    topics = [t for t, _ in hits]
+    client = client or get_client()
+    text = generate_text(client, build_prompt(question, articles, topics), on_chunk)
+    return Answer(
+        text=wiki.render_wikilinks(text, set(articles)),
+        sources=topics,
+        scores=dict(hits),
+    )
+
+
 def answer_question(
     question: str,
     articles: dict[str, str],
@@ -68,13 +86,5 @@ def answer_question(
 ) -> Answer:
     if not articles:
         raise ValueError("No wiki articles found. Run compile_wiki.py first.")
-
     hits = retrieval.retrieve(question, articles, top_k=top_k, embedder=embedder)
-    topics = [t for t, _ in hits]
-    client = client or get_client()
-    text = generate_text(client, build_prompt(question, articles, topics), on_chunk)
-    return Answer(
-        text=wiki.render_wikilinks(text, set(articles)),
-        sources=topics,
-        scores=dict(hits),
-    )
+    return answer_from_hits(question, articles, hits, client=client, on_chunk=on_chunk)

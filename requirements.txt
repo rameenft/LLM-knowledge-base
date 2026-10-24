@@ -1,4 +1,8 @@
+# Core + Azure Functions runtime
 google-genai
 fastembed
 numpy
 python-dotenv
+azure-functions
+azure-storage-blob
+azure-identity
