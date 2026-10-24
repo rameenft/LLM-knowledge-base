@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 *.pkl
+.venv/
+.pytest_cache/
+.azurite/
+*.npy
