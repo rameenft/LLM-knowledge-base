@@ -2,3 +2,10 @@
 __pycache__/
 *.pyc
 *.pkl
+.venv/
+.pytest_cache/
+.azurite/
+*.npy
+.tools/
+.local_storage/
+local.settings.json
