@@ -163,6 +163,9 @@ MCP client config (e.g. Claude Desktop `mcpServers`): `{"command": "python", "ar
 **Measured results (local machine, Azurite, 10 articles)**
 - 102 automated tests pass (90 need nothing; 12 run against the real Azurite emulator and skip automatically if it is not running).
 - `POST /api/search`, warm, 50 requests: median 39 ms, p95 45 ms (excludes Gemini; local, not a production benchmark).
+- First full ingestion with real Gemini 2.5 Flash: 10 articles compiled in 66 s, 0 failures (731–905 words each).
+- Re-running ingestion on unchanged notes: 10 of 10 articles skipped in 0.12 s with no Gemini calls (idempotent).
+- Live `/api/answer` and the MCP `answer_question` tool returned cited answers from the compiled wiki (single manual runs; quality was spot-checked, not formally evaluated).
 
 ---
 
