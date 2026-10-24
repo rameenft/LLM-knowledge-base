@@ -26,9 +26,9 @@ Ten informal research notes covering the five main technical areas of the platfo
 
 **Layer 3 — Retrieval-augmented Q&A**
 
-`qa.py` uses local sentence-transformer embeddings (`all-MiniLM-L6-v2`) for cosine similarity retrieval, then Gemini 2.5 Flash to generate cited answers from the top-4 retrieved articles. The embedding approach handles semantic queries that keyword matching would miss — for example, "how does the system detect sadness?" retrieves `AffectiveComputing` at 0.615 cosine similarity despite zero keyword overlap. Embeddings are cached locally so retrieval runs with no API calls.
+`qa.py` uses local embeddings (`all-MiniLM-L6-v2`, run through `fastembed`/ONNX) for cosine similarity retrieval, then Gemini 2.5 Flash to generate cited answers from the top-4 retrieved articles. The embedding approach handles semantic queries that keyword matching would miss — for example, "how does the system detect sadness or distress?" retrieves `AffectiveComputing` at 0.567 cosine similarity despite zero keyword overlap. Embeddings are cached locally so retrieval runs with no API calls.
 
-The entire pipeline runs at zero cost: Gemini 2.5 Flash on the free tier for compilation and Q&A, sentence-transformers running locally for retrieval.
+The entire pipeline runs at zero cost: Gemini 2.5 Flash on the free tier for compilation and Q&A, local embeddings for retrieval. The Azure extension below runs entirely on local emulators, so it also costs nothing.
 
 ---
 
@@ -60,12 +60,17 @@ The entire pipeline runs at zero cost: Gemini 2.5 Flash on the free tier for com
 │   ├── SafetyAndEscalation.md
 │   ├── VoiceInterface.md
 │   ├── _index.json             link graph and word counts
-│   └── _embeddings.pkl         cached sentence-transformer embeddings
+│   └── _embeddings.npy         cached embeddings (generated)
 │
-├── compile_wiki.py             LLM compiler
+├── kb/                         core package: storage, pipeline, retrieval, answer, api, service
+├── function_app.py             Azure Functions app (HTTP API + timer)
+├── mcp_server.py               MCP server (stdio)
+├── tests/                      pytest suite
+├── docs/                       architecture, security model, deployment reference
+├── compile_wiki.py             LLM compiler (CLI)
 ├── qa.py                       Q&A interface
 ├── build_index.py              rebuild _index.json without API calls
-├── test_pipeline.py            end-to-end validation
+├── test_pipeline.py            legacy setup check (superseded by tests/)
 ├── generate_report2.py         PDF report generator
 └── INDENG231_Project2_Report.pdf
 ```
@@ -76,7 +81,8 @@ The entire pipeline runs at zero cost: Gemini 2.5 Flash on the free tier for com
 
 **1. Install dependencies**
 ```bash
-pip install google-genai sentence-transformers
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 ```
 
 **2. Get a free Google API key** at aistudio.google.com (no credit card required). Go to Get API key → Create API key.
@@ -88,7 +94,7 @@ GOOGLE_API_KEY=your-key-here
 
 **4. Verify everything is working**
 ```bash
-python test_pipeline.py
+pytest            # offline tests (Gemini mocked); Azurite tests auto-skip if the emulator is down
 ```
 
 ---
@@ -112,6 +118,51 @@ python qa.py                   # interactive mode
 python qa.py --list            # list all articles with word and link counts
 python qa.py --index           # rebuild embedding index
 ```
+
+---
+
+## Azure extension (local, emulator-based)
+
+The original CLI still works unchanged. On top of it, the project now has a cloud-style architecture built with
+Azure Blob Storage, Azure Functions and an MCP server. **Everything was built and tested locally** against the
+Azurite storage emulator and the Azure Functions Core Tools host; **nothing is deployed to Azure.**
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md) and
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (an unexecuted reference).
+
+```mermaid
+flowchart LR
+  RAW[("Blob: raw")] --> PIPE["Ingestion pipeline<br/>validate · hash · compile · retry"]
+  PIPE <--> GEM["Gemini"]
+  PIPE --> PROC[("processed")] & ART[("artifacts")] & Q[("quarantine")]
+  TIMER["Timer / POST /ingest"] --> PIPE
+  API["Functions API<br/>/search /answer"] --> PROC & ART
+  MCP["MCP server"] --> API
+  AI["AI assistant"] --> MCP
+```
+
+**What is implemented**
+- **Blob Storage layer** (`kb/storage.py`): one interface, local-folder and Azure Blob backends; SHA-256 stored on upload and verified on download; Azurite-backed contract tests.
+- **Incremental ingestion pipeline** (`kb/pipeline.py`): validates inputs (bad files are quarantined), skips work when the corpus hash is unchanged (idempotent; no Gemini calls on re-run), retries transient errors with backoff, isolates per-article failures and resumes from a manifest.
+- **Azure Functions REST API** (`function_app.py`): `GET /api/health`, `GET /api/articles`, `POST /api/search`, `POST /api/answer`, `POST /api/ingest`, plus a daily timer trigger. JSON validation, structured error responses with request IDs, function-key auth on all but `/health`.
+- **MCP server** (`mcp_server.py`): read-only tools `search_documents`, `answer_question`, `list_articles`, tested with the official MCP Python client over stdio.
+- **Structured JSON logging** designed for Application Insights queries (Application Insights itself is **not** connected).
+
+**Not implemented:** Azure deployment, Application Insights/alerts, Azure Data Factory (rationale in the architecture doc), Entra ID auth (documented upgrade path), Key Vault.
+
+**Run it locally**
+```bash
+npx --yes azurite --location .azurite --silent &
+export KB_STORAGE_BACKEND=azure AZURE_STORAGE_CONNECTION_STRING=UseDevelopmentStorage=true
+python -m kb.cli upload-raw && python -m kb.cli run     # needs GOOGLE_API_KEY
+func start                                              # API on http://localhost:7071/api
+curl -X POST localhost:7071/api/search -d '{"query":"how is distress detected?"}'
+```
+MCP client config (e.g. Claude Desktop `mcpServers`): `{"command": "python", "args": ["mcp_server.py"], "env": {"KB_API_URL": "http://localhost:7071/api"}}`
+(only the Python MCP client has been tested; Claude Desktop has not).
+
+**Measured results (local machine, Azurite, 10 articles)**
+- 102 automated tests pass (90 need nothing; 12 run against the real Azurite emulator and skip automatically if it is not running).
+- `POST /api/search`, warm, 50 requests: median 39 ms, p95 45 ms (excludes Gemini; local, not a production benchmark).
 
 ---
 
